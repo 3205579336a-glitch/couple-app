@@ -1,13 +1,14 @@
 // 文件路径: client/api/photos.js
-// 注意：这里的代码写法和 Express 略有不同，但更简洁。
 
-import { initializeApp, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// 使用 Vercel 的环境变量来安全地存储密钥
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+// 从 Vercel 的环境变量中安全地读取服务账户密钥
+// 你需要在 Vercel 项目的设置中添加这个环境变量
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}');
 
-if (!admin.apps.length) {
+// 初始化 Firebase Admin SDK (确保只初始化一次)
+if (!getApps().length) {
   initializeApp({
     credential: cert(serviceAccount)
   });
@@ -15,20 +16,44 @@ if (!admin.apps.length) {
 
 const db = getFirestore();
 
+// 这是 Vercel Serverless Function 的标准写法
 export default async function handler(req, res) {
+  const getCollectionPath = () => `artifacts/couple-70fcb/public/data/photos`;
+
+  // 根据请求方法 (GET, POST 等) 分别处理
   if (req.method === 'GET') {
-    // 处理 GET 请求
-    const photosRef = db.collection('photos');
-    const snapshot = await photosRef.orderBy('createdAt', 'desc').get();
-    const photos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.status(200).json(photos);
-  } else if (req.method === 'POST') {
-    // 处理 POST 请求
-    const newPhoto = req.body;
-    const docRef = await db.collection('photos').add(newPhoto);
-    res.status(201).json({ id: docRef.id, ...newPhoto });
-  } else {
+    try {
+      const photosRef = db.collection(getCollectionPath());
+      const snapshot = await photosRef.orderBy('createdAt', 'desc').get();
+      const photos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.status(200).json(photos);
+    } catch (error) {
+      console.error("Error getting photos:", error);
+      return res.status(500).json({ error: 'Error fetching photos' });
+    }
+  } 
+  
+  else if (req.method === 'POST') {
+    try {
+      const newPhotoData = req.body;
+      if (!newPhotoData.imageUrl || !newPhotoData.caption) {
+        return res.status(400).json({ error: 'Image URL and caption are required.' });
+      }
+      
+      const docRef = await db.collection(getCollectionPath()).add({
+        ...newPhotoData,
+        createdAt: new Date(),
+      });
+      return res.status(201).json({ id: docRef.id, ...newPhotoData });
+    } catch (error) {
+      console.error("Error adding photo:", error);
+      return res.status(500).json({ error: 'Error adding photo' });
+    }
+  } 
+  
+  // 如果是其他方法 (如 PUT, DELETE), 则返回不允许
+  else {
     res.setHeader('Allow', ['GET', 'POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 }
