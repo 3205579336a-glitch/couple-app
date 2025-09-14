@@ -1,74 +1,84 @@
-// src/pages/HomePage.js (EXAMPLE of fetching data)
+// 文件路径: src/pages/HomePage.js (重构后)
 
 import React, { useState, useEffect } from 'react';
-import { Spin, List, Card, Button } from 'antd';
+import { Spin, Typography, Card, Row, Col, Statistic } from 'antd';
+import { CameraOutlined, ShopOutlined } from '@ant-design/icons';
 
-const API_URL = 'http://localhost:3001/api'; // Your server URL
+const { Title, Paragraph } = Typography;
+const API_BASE_URL = '/api';
 
 const HomePage = ({ user }) => {
-  const [photos, setPhotos] = useState([]);
+  const [stats, setStats] = useState({ photoCount: 0, restaurantCount: 0 });
   const [loading, setLoading] = useState(true);
 
-  // Fetch photos from the server when the component mounts
   useEffect(() => {
-    const fetchPhotos = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/photos`);
-        const data = await response.json();
-        setPhotos(data);
+        
+        // 并发请求照片和餐厅数据，速度更快
+        const [photosResponse, restaurantsResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/photos`),
+          fetch(`${API_BASE_URL}/restaurants`) // 确保你已在 api 目录中创建了 restaurants.js
+        ]);
+
+        const photos = await photosResponse.json();
+        const restaurants = await restaurantsResponse.json();
+
+        setStats({
+          photoCount: photos.length,
+          restaurantCount: restaurants.length
+        });
+        
       } catch (error) {
-        console.error("Failed to fetch photos from server:", error);
+        console.error("Failed to fetch homepage data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPhotos();
+    fetchData();
   }, []);
 
-  // Function to add a new photo by sending data to the server
-  const handleAddPhoto = async (photoData) => {
-    try {
-      const response = await fetch(`${API_URL}/photos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...photoData,
-          authorId: user.uid,
-          author: user.displayName || '匿名用户',
-        }),
-      });
-      const newPhoto = await response.json();
-      // Add the new photo to the top of the list to update the UI
-      setPhotos([newPhoto, ...photos]);
-    } catch (error) {
-      console.error("Failed to add photo:", error);
-    }
-  };
-
   if (loading) {
-    return <Spin tip="加载回忆中..." size="large" />;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <Spin tip="加载主页数据中..." size="large" />
+      </div>
+    );
   }
 
   return (
     <div>
-      {/* You would have a form that calls handleAddPhoto on submit */}
-      {/* <AddPhotoForm onAdd={handleAddPhoto} /> */}
-
-      <List
-        grid={{ gutter: 16, column: 4 }}
-        dataSource={photos}
-        renderItem={(photo) => (
-          <List.Item>
-            <Card title={photo.caption}>
-              <img alt={photo.caption} src={photo.imageUrl} style={{ width: '100%' }} />
-            </Card>
-          </List.Item>
-        )}
-      />
+      <Card style={{ marginBottom: '24px' }}>
+        <Title level={2}>欢迎回来！</Title>
+        <Paragraph>
+          这里是你们共同的回忆空间。继续记录每一个值得珍藏的瞬间吧！
+        </Paragraph>
+      </Card>
+      
+      <Row gutter={16}>
+        <Col span={12}>
+          <Card>
+            <Statistic
+              title="已记录的照片回忆"
+              value={stats.photoCount}
+              prefix={<CameraOutlined />}
+              suffix="张"
+            />
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card>
+            <Statistic
+              title="一起光顾的美食店"
+              value={stats.restaurantCount}
+              prefix={<ShopOutlined />}
+              suffix="家"
+            />
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 };
